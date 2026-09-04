@@ -704,8 +704,9 @@ work on a fresh checkout even though the DSL reads `columns_hash` at class-defin
 Stated plainly, so you do not go looking:
 
 - Tools only. There is no `resources/`, `prompts/`, sampling, progress or cancellation support.
-- Resource actions are `:list` and `:show`. Writes are command tools you author yourself, and
-  `actions :update` compiles to nothing rather than erroring.
+- Resource actions are `:list` and `:show`. Writes are command tools you author yourself;
+  declaring `actions :update` (or any other write action) raises an `ArgumentError` at compile
+  time rather than registering nothing.
 - Offset pagination only (`page` / `per_page`); no cursors, no `has_more`, no upper clamp on
   `per_page`.
 - `attributes` is one static list per definition. There is no per-role attribute masking — keep

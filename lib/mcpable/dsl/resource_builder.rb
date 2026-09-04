@@ -8,6 +8,7 @@ module Mcpable
       end
 
       DEFAULT_PER_PAGE = 25
+      SUPPORTED_ACTIONS = %i[list show].freeze
 
       def initialize(target)
         @target = target
@@ -59,6 +60,8 @@ module Mcpable
       def annotations(**values) = @annotations = @annotations.merge(values)
 
       def compile
+        validate_actions!
+
         @source ||= build_default_source
         raise ArgumentError, "#{@target} needs a source" if @source.nil?
 
@@ -69,6 +72,17 @@ module Mcpable
       end
 
       private
+
+      def validate_actions!
+        raise ArgumentError, "#{@target} declares no actions" if @actions.empty?
+
+        unsupported = @actions - SUPPORTED_ACTIONS
+        return if unsupported.empty?
+
+        raise ArgumentError,
+              "#{@target} declares unsupported actions: #{unsupported.join(', ')} " \
+              "(supported: #{SUPPORTED_ACTIONS.join(', ')}; write actions are not implemented yet)"
+      end
 
       def build_default_source
         factory = self.class.source_factory

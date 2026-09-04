@@ -15,6 +15,7 @@ module Mcpable
         @base_name = Naming.underscore(target.name.to_s.split("::").last)
         @description = nil
         @attributes = []
+        @conditional_attributes = []
         @filters = []
         @source = nil
         @policy = nil
@@ -30,6 +31,13 @@ module Mcpable
       def description(value) = @description = value
 
       def attributes(*values) = @attributes = values.flatten.map(&:to_sym)
+
+      def attribute(name, **options)
+        condition = options[:if]
+        return @attributes |= [name.to_sym] if condition.nil?
+
+        @conditional_attributes << { name: name.to_sym, condition: condition }
+      end
 
       def filter(name, type: nil, match: nil, range: false, required: false, description: nil,
                 enum: nil, scope: false)
@@ -61,6 +69,7 @@ module Mcpable
 
       def compile
         validate_actions!
+        validate_conditional_attributes!
 
         @source ||= build_default_source
         raise ArgumentError, "#{@target} needs a source" if @source.nil?
@@ -72,6 +81,18 @@ module Mcpable
       end
 
       private
+
+      def validate_conditional_attributes!
+        hidden = @conditional_attributes.map { |a| a[:name] }
+        return if hidden.empty?
+
+        leaked = @filters.map { |f| f[:name] } & hidden
+        return if leaked.empty?
+
+        raise ArgumentError,
+              "#{@target} filters on conditionally visible attributes: #{leaked.join(', ')} " \
+              "(a filter would expose them to callers that cannot read them)"
+      end
 
       def validate_actions!
         raise ArgumentError, "#{@target} declares no actions" if @actions.empty?
@@ -96,10 +117,12 @@ module Mcpable
       def compile_list
         arguments = list_arguments
         attributes = @attributes
+        conditional = @conditional_attributes
         source_ref = @source
         per_page = @per_page
 
         handler = lambda do |ctx|
+          visible = ResourceBuilder.visible_attributes(attributes, conditional, ctx)
           source = ResourceBuilder.resolve_source(source_ref)
           filters = arguments.select(&:filter?).to_h { |a| [a, ctx.args[a.name]] }
           page = source.fetch(
@@ -110,7 +133,7 @@ module Mcpable
             order: ctx.args[:order]
           )
           Result.ok(
-            records: page.records.map { |r| ResourceBuilder.serialize(r, attributes) },
+            records: page.records.map { |r| ResourceBuilder.serialize(r, visible) },
             total: page.total,
             page: page.page,
             per_page: page.per_page
@@ -136,6 +159,7 @@ module Mcpable
 
       def compile_show
         attributes = @attributes
+        conditional = @conditional_attributes
         source_ref = @source
 
         handler = lambda do |ctx|
@@ -143,7 +167,8 @@ module Mcpable
           record = source.find(ctx.args[:id], scope: ctx.scope)
           next Result.fail("not found") if record.nil?
 
-          Result.ok(ResourceBuilder.serialize(record, attributes))
+          visible = ResourceBuilder.visible_attributes(attributes, conditional, ctx)
+          Result.ok(ResourceBuilder.serialize(record, visible))
         end
 
         Definition.build(
@@ -207,6 +232,19 @@ module Mcpable
         return source_ref if source_ref.respond_to?(:fetch)
 
         source_ref.respond_to?(:call) ? source_ref.call : source_ref
+      end
+
+      def self.visible_attributes(base, conditional, ctx)
+        return base if conditional.empty?
+
+        base + conditional.select { |a| visible?(a[:condition], ctx) }.map { |a| a[:name] }
+      end
+
+      def self.visible?(condition, ctx)
+        case condition
+        when Symbol then ctx.user.respond_to?(condition) && !!ctx.user.public_send(condition)
+        else condition.arity.zero? ? !!condition.call : !!condition.call(ctx)
+        end
       end
 
       def self.serialize(record, attributes)

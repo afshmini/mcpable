@@ -165,6 +165,7 @@ class Product
   mcpable do
     description "Products"
     attributes :id, :name, :sku, :price_cents, :store_id
+    attribute :cost_cents, if: :admin?
     filter :store_id, type: :integer
     filter :name, match: :partial, type: :string
     filter :released_on, range: true, type: :date
@@ -182,8 +183,24 @@ This compiles two definitions: `products_list` (paginated, filter arguments,
 `range: true` expands into `released_on_from` / `released_on_to`.
 
 `attributes` is the serialization whitelist: a record is rendered as exactly those keys, read
-by `public_send` and falling back to `[]`. It is one static list per definition, evaluated at
-compile time — a column left out of it is unreachable over MCP for every caller.
+by `public_send` and falling back to `[]`. A column left out of it is unreachable over MCP for
+every caller.
+
+`attribute` adds one key that is serialized only when its `if:` condition holds for the caller,
+which is how a column is shown to some roles and withheld from others. A `Symbol` is sent to
+`ctx.user` (a `nil` user, or one that does not respond to it, fails closed); a callable receives
+the `ToolCall`, so it can read `ctx.user`, `ctx.scope` or `ctx.context`. The condition is
+evaluated per call, on both `list` and `show`.
+
+```ruby
+attribute :cost_cents, if: :admin?
+attribute :margin, if: ->(ctx) { ctx.user&.finance? }
+```
+
+Two leaks are closed for you. Conditional attributes are excluded from the default
+`order_whitelist`, because ordering by a hidden column lets a caller infer its values from row
+order. And declaring a `filter` on a conditionally visible attribute raises an `ArgumentError` at
+compile time, for the same reason — filtering on a value you cannot read still reveals it.
 
 `name` overrides the base name used for the tool names; it defaults to the underscored,
 namespace-stripped class name, pluralized by `Mcpable::Naming.pluralize`, which handles the
@@ -709,9 +726,10 @@ Stated plainly, so you do not go looking:
   time rather than registering nothing.
 - Offset pagination only (`page` / `per_page`); no cursors, no `has_more`, no upper clamp on
   `per_page`.
-- `attributes` is one static list per definition. There is no per-role attribute masking — keep
-  a secret out of the whitelist entirely, and expose it from a serializer elsewhere if some
-  roles may see it.
+- Attribute visibility is decided per call, not per record: `attribute ... if:` receives the
+  `ToolCall`, never the record being serialized, so "this row's field is visible but that row's
+  is not" needs a source or a command tool of your own. There is also no caller-supplied field
+  selection — the whitelist is the whole contract.
 - Filters address columns on the model's own table, and the five kinds in the table above are
   all of them. There is no join, association, `IN`, negation, OR or free-form-search filter.
 - `enum:` reaches the JSON Schema only; the runtime does not check membership itself.

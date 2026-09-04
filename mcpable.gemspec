@@ -12,9 +12,16 @@ Gem::Specification.new do |spec|
                      "Protocol tools through a declarative DSL, a middleware pipeline and " \
                      "pluggable source, schema and transport ports."
   spec.license = "MIT"
+  spec.homepage = "https://github.com/afshmini/mcpable"
   spec.required_ruby_version = ">= 3.2"
 
-  spec.files = Dir["lib/**/*.rb", "app/**/*.rb", "README.md"]
+  spec.metadata = {
+    "source_code_uri" => spec.homepage,
+    "bug_tracker_uri" => "#{spec.homepage}/issues",
+    "rubygems_mfa_required" => "true"
+  }
+
+  spec.files = Dir["lib/**/*.rb", "app/**/*.rb", "README.md", "LICENSE"]
   spec.require_paths = ["lib"]
 
   spec.add_dependency "mcp", ">= 1.0", "< 2.0"

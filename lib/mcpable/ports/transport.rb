@@ -19,7 +19,7 @@ module Mcpable
         raise NotImplementedError, "#{self.class}#handle"
       end
 
-      def serve_stdio
+      def serve_stdio(context: {})
         raise NotImplementedError, "#{self.class}#serve_stdio"
       end
     end

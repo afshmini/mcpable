@@ -15,7 +15,7 @@ Four ports are pluggable:
 | `Ports::Source` | `fetch(filters:, scope:, page:, per_page:, order:) -> Page`, `find(id, scope:)` |
 | `Ports::SchemaStrategy` | `input_schema(definition) -> JSON Schema Hash` |
 | `Ports::Middleware` | Rack-style `initialize(app, *args)` / `call(ctx) -> Result` |
-| `Ports::Transport` | `list_tools`, `handle(raw_request, context:)`, `serve_stdio` |
+| `Ports::Transport` | `list_tools`, `handle(raw_request, context:)`, `serve_stdio(context:)` |
 
 `Definition` carries `name`, `description`, `arguments`, `handler`, `annotations`
 (`read_only:`, `destructive:`, `open_world:`), `profiles` and a free-form `metadata` hash
@@ -120,8 +120,13 @@ require "mcpable/transports/official_mcp"
 transport = Mcpable::Transports::OfficialMcp.new(profile: :default)
 transport.list_tools
 transport.handle(request_body, context: { user_id: 1 })
-transport.serve_stdio
+transport.serve_stdio(context: { api_token: ENV["MCP_API_TOKEN"] })
 ```
+
+Both entry points take the same `context:` hash. Over HTTP a `context_builder` derives it from
+the Rack env once per request; over stdio there is no request env, so the process supplies its
+context once at startup and every tool call on that connection runs under it. One stdio process
+therefore serves exactly one actor.
 
 Built on the official [`mcp`](https://rubygems.org/gems/mcp) gem: tools are built with
 `MCP::Tool.define`, requests go through `MCP::Server#handle_json` (String in, String out) or

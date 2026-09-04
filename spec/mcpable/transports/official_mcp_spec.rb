@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
+require "stringio"
 require "mcpable/transports/official_mcp"
 
 RSpec.describe Mcpable::Transports::OfficialMcp do
@@ -163,6 +164,60 @@ RSpec.describe Mcpable::Transports::OfficialMcp do
     it "returns nil for a notification" do
       register
       expect(transport.handle(JSON.generate(jsonrpc: "2.0", method: "notifications/initialized"))).to be_nil
+    end
+  end
+
+  describe "#serve_stdio" do
+    def serve(lines, context: {})
+      original_stdin = $stdin
+      original_stdout = $stdout
+      $stdin = StringIO.new(lines.map { |line| "#{line}\n" }.join)
+      $stdout = StringIO.new
+      transport.serve_stdio(context: context)
+      $stdout.string.each_line.reject { |line| line.strip.empty? }.map { |line| JSON.parse(line) }
+    ensure
+      $stdin = original_stdin
+      $stdout = original_stdout
+    end
+
+    it "completes the handshake and lists tools over a newline delimited stream" do
+      register
+      responses = serve([
+        rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "spec", version: "1" } }),
+        JSON.generate(jsonrpc: "2.0", method: "notifications/initialized"),
+        rpc("tools/list", nil, id: 2)
+      ])
+
+      expect(responses.length).to eq(2)
+      expect(responses.first["result"]["protocolVersion"]).to eq("2025-06-18")
+      expect(responses.first["result"]["serverInfo"]["name"]).to eq("mcpable")
+      expect(responses.first["result"]["capabilities"]).to include("tools")
+      expect(responses.last["id"]).to eq(2)
+      expect(responses.last["result"]["tools"].map { |t| t["name"] }).to eq(["cost_centers_list"])
+    end
+
+    it "runs every tool call on the connection under the context given at startup" do
+      register
+      responses = serve(
+        [rpc("tools/call", { name: "cost_centers_list", arguments: { company_id: 1 } })],
+        context: { api_token: "nw-member-token" }
+      )
+      payload = JSON.parse(responses.first["result"]["content"].first["text"])
+
+      expect(payload["context"]).to eq("api_token" => "nw-member-token")
+    end
+
+    it "defaults to an empty context" do
+      register
+      responses = serve([rpc("tools/call", { name: "cost_centers_list", arguments: { company_id: 1 } })])
+      payload = JSON.parse(responses.first["result"]["content"].first["text"])
+
+      expect(payload["context"]).to eq({})
+    end
+
+    it "writes nothing for a notification" do
+      register
+      expect(serve([JSON.generate(jsonrpc: "2.0", method: "notifications/initialized")])).to be_empty
     end
   end
 end

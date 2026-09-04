@@ -10,13 +10,14 @@ module Mcpable
 
       attr_reader :server_name, :server_version
 
-      def initialize(registry: nil, runtime: nil, profile: :default,
+      def initialize(registry: nil, runtime: nil, profile: :default, config: nil,
                      server_name: DEFAULT_SERVER_NAME, server_version: Mcpable::VERSION)
         super(
           registry: registry || Mcpable.registry,
           runtime: runtime || Mcpable.runtime,
           profile: profile
         )
+        @config = config
         @server_name = server_name
         @server_version = server_version
       end
@@ -49,6 +50,14 @@ module Mcpable
 
       private
 
+      def current_config
+        @config || runtime_config || Mcpable.config
+      end
+
+      def runtime_config
+        runtime.config if runtime.respond_to?(:config)
+      end
+
       def definitions
         registry.for_profile(profile)
       end
@@ -64,7 +73,7 @@ module Mcpable
         MCP::Tool.define(
           name: name,
           description: definition.description,
-          input_schema: normalize_schema(Mcpable.config.schema_strategy.input_schema(definition)),
+          input_schema: normalize_schema(current_config.schema_strategy.input_schema(definition)),
           annotations: annotations_for(definition)
         ) do |**args|
           args.delete(:server_context)

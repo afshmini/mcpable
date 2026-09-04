@@ -47,7 +47,7 @@ module Mcpable
     attr_accessor :schema_strategy, :error_mapper, :context_builder
 
     def initialize
-      @pipeline = Pipeline.new
+      @pipeline = Pipeline.new(config: self)
       @schema_strategy = SchemaStrategies::ExplicitSchema.new
       @error_mapper = DEFAULT_ERROR_MAPPER
       @context_builder = DEFAULT_CONTEXT_BUILDER

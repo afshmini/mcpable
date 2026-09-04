@@ -652,6 +652,35 @@ builder.profiles :leaky
 builder.compile.each { |definition| Mcpable.registry.register(definition) }
 ```
 
+### Isolating a test without touching globals
+
+`Runtime` and `OfficialMcp` accept an injected `Registry` and `Configuration`, and both are
+honoured all the way down — the `error_mapper` a pipeline reaches for and the `schema_strategy` a
+transport builds schemas with come from the injected configuration, not from `Mcpable.config`.
+
+```ruby
+config = Mcpable::Configuration.new
+config.error_mapper = ->(e) { Mcpable::Result.fail("boom: #{e.message}") }
+config.pipeline.use(MyApp::Mcp::AuthenticateUser)
+
+registry = Mcpable::Registry.new
+registry.register(definition)
+
+runtime = Mcpable::Runtime.new(registry: registry, config: config)
+runtime.call_tool("products_list", args: {}, context: {})
+
+transport = Mcpable::Transports::OfficialMcp.new(registry: registry, runtime: runtime)
+transport.list_tools
+```
+
+A transport given no `config:` of its own adopts the one carried by its runtime, and falls back to
+`Mcpable.config` only when neither was injected.
+
+Note that the DSL always registers into the **global** registry: `include Mcpable::Resource` and
+`mcp_tool` call `Mcpable.registry.register` at class-definition time. An injected registry
+therefore holds only definitions you compile and register by hand, which is what the negative-test
+example above does.
+
 ## Adapter require paths
 
 `require "mcpable"` loads the core only. Adapters are opt-in:

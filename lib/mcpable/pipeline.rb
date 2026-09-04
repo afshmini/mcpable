@@ -11,8 +11,9 @@ module Mcpable
 
     attr_reader :middlewares
 
-    def initialize
+    def initialize(config: nil)
       @middlewares = []
+      @config = config
     end
 
     def use(mw, *args)
@@ -29,11 +30,13 @@ module Mcpable
       result = build_stack.call(ctx)
       result.is_a?(Result) ? result : Result.fail("invalid result")
     rescue StandardError => e
-      mapped = Mcpable.config.error_mapper.call(e)
+      mapped = error_mapper.call(e)
       mapped.is_a?(Result) ? mapped : Result.fail("invalid result")
     end
 
     private
+
+    def error_mapper = (@config || Mcpable.config).error_mapper
 
     def build_stack
       @middlewares.reverse.reduce(HANDLER) do |app, (mw, args)|

@@ -6,6 +6,14 @@ module Mcpable
       base.extend(ClassMethods)
     end
 
+    attr_accessor :mcp_call
+
+    def current_user = mcp_call&.user
+
+    def current_scope = mcp_call&.scope
+
+    def current_context = mcp_call&.context || {}
+
     module ClassMethods
       attr_reader :mcp_definition
 

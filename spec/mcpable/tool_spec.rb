@@ -102,6 +102,48 @@ RSpec.describe Mcpable::Tool do
     expect(seen).to eq(5)
   end
 
+  it "gives the tool instance the ToolCall, its user and its scope" do
+    seen = nil
+    Class.new do
+      include Mcpable::Tool
+
+      def self.name = "Contextual"
+
+      define_method(:call) do
+        seen = { user: current_user, scope: current_scope, context: current_context }
+        :done
+      end
+
+      mcp_tool { name "contextual" }
+    end
+
+    assign = Class.new(Mcpable::Ports::Middleware) do
+      def call(ctx)
+        ctx.assigns[:user] = "the-user"
+        ctx.assigns[:scope] = "the-scope"
+        @app.call(ctx)
+      end
+    end
+    Mcpable.config.pipeline.use(assign)
+
+    expect(runtime.call_tool("contextual", context: { tenant: 9 })).to be_ok
+    expect(seen).to eq(user: "the-user", scope: "the-scope", context: { tenant: 9 })
+  end
+
+  it "leaves a tool that does not include Mcpable::Tool alone" do
+    target = Class.new do
+      def self.name = "Bare"
+
+      def call = :bare
+    end
+
+    builder = Mcpable::Dsl::ToolBuilder.new(target)
+    builder.name "bare"
+    Mcpable.registry.register(builder.compile)
+
+    expect(runtime.call_tool("bare").payload).to eq(:bare)
+  end
+
   it "supports an explicit builder argument" do
     build_tool do
       mcp_tool do |t|

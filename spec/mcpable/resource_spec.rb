@@ -144,6 +144,95 @@ RSpec.describe Mcpable::Resource do
     end.to raise_error(ArgumentError, /needs a source/)
   end
 
+  describe "the source_factory soft hook" do
+    around do |example|
+      previous = Mcpable::Dsl::ResourceBuilder.source_factory
+      example.run
+    ensure
+      Mcpable::Dsl::ResourceBuilder.source_factory = previous
+    end
+
+    it "wires a source for a target the factory recognises" do
+      seen = nil
+      rows = records
+      Mcpable::Dsl::ResourceBuilder.source_factory = lambda do |target, order_whitelist:|
+        seen = { target: target, order_whitelist: order_whitelist }
+        Mcpable::Sources::EnumerableSource.new(rows)
+      end
+
+      klass = Class.new do
+        include Mcpable::Resource
+
+        def self.name = "Autowired"
+
+        mcpable do
+          attributes :id, :name
+          actions :list
+        end
+      end
+
+      expect(seen[:target]).to be(klass)
+      expect(seen[:order_whitelist]).to eq(%i[id name])
+      expect(runtime.call_tool("autowireds_list").payload[:total]).to eq(3)
+    end
+
+    it "passes an explicit order_whitelist to the factory" do
+      seen = nil
+      rows = records
+      Mcpable::Dsl::ResourceBuilder.source_factory = lambda do |_target, order_whitelist:|
+        seen = order_whitelist
+        Mcpable::Sources::EnumerableSource.new(rows)
+      end
+
+      Class.new do
+        include Mcpable::Resource
+
+        def self.name = "Ordered"
+
+        mcpable do
+          attributes :id, :name, :number
+          order_whitelist :number
+          actions :list
+        end
+      end
+
+      expect(seen).to eq([:number])
+    end
+
+    it "prefers an explicitly declared source" do
+      Mcpable::Dsl::ResourceBuilder.source_factory = ->(_target, order_whitelist:) { raise "not reached" }
+      rows = records
+
+      Class.new do
+        include Mcpable::Resource
+
+        def self.name = "Explicit"
+
+        mcpable do
+          attributes :id
+          actions :list
+          source Mcpable::Sources::EnumerableSource.new(rows)
+        end
+      end
+
+      expect(runtime.call_tool("explicits_list").payload[:total]).to eq(3)
+    end
+
+    it "still demands a source when the factory declines" do
+      Mcpable::Dsl::ResourceBuilder.source_factory = ->(_target, order_whitelist:) { nil }
+
+      expect do
+        Class.new do
+          include Mcpable::Resource
+
+          def self.name = "Declined"
+
+          mcpable { attributes :id }
+        end
+      end.to raise_error(ArgumentError, /needs a source/)
+    end
+  end
+
   it "accepts a lambda source resolved per call" do
     calls = 0
     rows = records

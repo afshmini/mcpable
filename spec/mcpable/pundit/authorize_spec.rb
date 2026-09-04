@@ -81,11 +81,29 @@ RSpec.describe Mcpable::Pundit::Authorize do
     Mcpable.config.pipeline.call(ctx)
   end
 
-  it "allows an authorized show and leaves the scope alone" do
+  it "assigns the policy scope on show so a record cannot be read across tenants" do
     result = call(action: :show, policy: permissive_policy)
     expect(result).to be_ok
-    expect(result.payload[:scope]).to be_nil
+    expect(result.payload[:scope]).to eq([{ id: 1, owner: 7 }])
     expect(result.payload[:user]).to be(user)
+  end
+
+  it "refuses a show loudly when the policy has no Scope class" do
+    Mcpable.configure { |c| c.error_mapper = ->(e) { raise e } }
+    scopeless = scopeless_policy
+    scopeless.define_method(:show?) { true }
+
+    expect { call(action: :show, policy: scopeless) }
+      .to raise_error(Mcpable::MissingScopeError, /ScopelessPolicy/)
+  end
+
+  it "leaves the scope alone for a non-read action" do
+    writable = permissive_policy
+    writable.define_method(:update?) { true }
+
+    result = call(action: :update, policy: writable)
+    expect(result).to be_ok
+    expect(result.payload[:scope]).to be_nil
   end
 
   it "assigns the policy scope on list" do

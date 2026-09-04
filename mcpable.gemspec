@@ -14,7 +14,7 @@ Gem::Specification.new do |spec|
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.2"
 
-  spec.files = Dir["lib/**/*.rb", "README.md"]
+  spec.files = Dir["lib/**/*.rb", "app/**/*.rb", "README.md"]
   spec.require_paths = ["lib"]
 
   spec.add_dependency "mcp", ">= 1.0", "< 2.0"

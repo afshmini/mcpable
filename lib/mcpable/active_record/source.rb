@@ -7,6 +7,10 @@ module Mcpable
 
       attr_reader :order_whitelist
 
+      def self.supports?(model)
+        model.respond_to?(:all) && model.respond_to?(:arel_table) && model.respond_to?(:columns_hash)
+      end
+
       def initialize(base, order_whitelist: [])
         super(base)
         @order_whitelist = order_whitelist.map(&:to_s)
@@ -58,19 +62,25 @@ module Mcpable
         case argument.filter_kind
         when :eq then relation.where(target => value)
         when :match then apply_match(relation, target, value)
-        when :range_from then relation.where(relation.arel_table[target].gteq(value))
-        when :range_to then relation.where(relation.arel_table[target].lteq(value))
+        when :range_from then relation.where(arel_column(relation, target).gteq(value))
+        when :range_to then relation.where(arel_column(relation, target).lteq(value))
         when :scope then value ? relation.public_send(target) : relation
         else relation
         end
       end
 
       def apply_match(relation, target, value)
-        column = relation.arel_table[target]
-        quoted = "#{relation.connection.quote_table_name(relation.table_name)}." \
-                 "#{relation.connection.quote_column_name(column.name)}"
-        pattern = "%#{relation.sanitize_sql_like(value.to_s)}%"
-        relation.where("#{quoted} ILIKE ?", pattern)
+        pattern = "%#{escape_like(relation, value.to_s)}%"
+        relation.where(arel_column(relation, target).matches(pattern, nil, false))
+      end
+
+      def arel_column(relation, target)
+        relation.klass.arel_table[target]
+      end
+
+      def escape_like(relation, value)
+        model = relation.klass
+        model.respond_to?(:sanitize_sql_like) ? model.sanitize_sql_like(value) : value
       end
 
       def apply_order(relation, order)

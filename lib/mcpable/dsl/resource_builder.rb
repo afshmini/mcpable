@@ -4,7 +4,7 @@ module Mcpable
   module Dsl
     class ResourceBuilder
       class << self
-        attr_accessor :type_inferrer
+        attr_accessor :type_inferrer, :source_factory
       end
 
       DEFAULT_PER_PAGE = 25
@@ -18,6 +18,7 @@ module Mcpable
         @source = nil
         @policy = nil
         @actions = %i[list show]
+        @order_whitelist = nil
         @per_page = DEFAULT_PER_PAGE
         @profiles = [:default]
         @annotations = { read_only: true }
@@ -45,6 +46,8 @@ module Mcpable
 
       def source(value) = @source = value
 
+      def order_whitelist(*values) = @order_whitelist = values.flatten.map(&:to_sym)
+
       def policy(value) = @policy = value
 
       def actions(*values) = @actions = values.flatten.map(&:to_sym)
@@ -56,6 +59,7 @@ module Mcpable
       def annotations(**values) = @annotations = @annotations.merge(values)
 
       def compile
+        @source ||= build_default_source
         raise ArgumentError, "#{@target} needs a source" if @source.nil?
 
         definitions = []
@@ -65,6 +69,11 @@ module Mcpable
       end
 
       private
+
+      def build_default_source
+        factory = self.class.source_factory
+        factory&.call(@target, order_whitelist: @order_whitelist || @attributes)
+      end
 
       def list_name = "#{Naming.pluralize(@base_name)}_list"
 

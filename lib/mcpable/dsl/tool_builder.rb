@@ -39,7 +39,9 @@ module Mcpable
 
         handler = lambda do |ctx|
           call_args = ctx.args.slice(*argument_names)
-          value = target.new.call(**call_args)
+          instance = target.new
+          instance.mcp_call = ctx if instance.respond_to?(:mcp_call=)
+          value = instance.call(**call_args)
           value.is_a?(Result) ? value : Result.ok(value)
         end
 
